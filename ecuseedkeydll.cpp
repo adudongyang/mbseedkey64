@@ -7,7 +7,6 @@
 
 QString GetLastErrorAsString()
 {
-    //Get the error message, if any.
     auto errorMessageID = ::GetLastError();
     if(errorMessageID == 0)return QStringLiteral("No error message has been recorded");
 
@@ -15,7 +14,6 @@ QString GetLastErrorAsString()
     size_t size = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                                  NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), messageBuffer, 0, NULL);
 
-    qDebug() << " Debug errmsg: " << size << errorMessageID;
     auto message = QString::fromWCharArray(messageBuffer, size);
     if(message.isEmpty())message.append(QString::number(errorMessageID));
     LocalFree(messageBuffer);
@@ -24,16 +22,15 @@ QString GetLastErrorAsString()
 }
 
 ECUSeedKeyDLL::ECUSeedKeyDLL(QObject *parent) : QObject(parent),
-    GetConfiguredAccessTypes(Q_NULLPTR), GetSeedLength(Q_NULLPTR), GetKeyLength(Q_NULLPTR),  GetECUName(Q_NULLPTR),
-    GenerateKeyExOpt(Q_NULLPTR),
+    GetConfiguredAccessTypes(Q_NULLPTR), GetSeedLength(Q_NULLPTR), GetKeyLength(Q_NULLPTR), GetECUName(Q_NULLPTR),
+    GetComment(Q_NULLPTR), GenerateKeyExOpt(Q_NULLPTR), GenerateKeyEx(Q_NULLPTR),
     p_dllHandle(Q_NULLPTR)
 {
-
 }
 
 ECUSeedKeyDLL::ECUSeedKeyDLL(QString dll_path, QObject *parent) : QObject(parent),
-    GetConfiguredAccessTypes(Q_NULLPTR), GetSeedLength(Q_NULLPTR), GetKeyLength(Q_NULLPTR),  GetECUName(Q_NULLPTR),
-    GenerateKeyExOpt(Q_NULLPTR),
+    GetConfiguredAccessTypes(Q_NULLPTR), GetSeedLength(Q_NULLPTR), GetKeyLength(Q_NULLPTR), GetECUName(Q_NULLPTR),
+    GetComment(Q_NULLPTR), GenerateKeyExOpt(Q_NULLPTR), GenerateKeyEx(Q_NULLPTR),
     p_dllHandle(Q_NULLPTR),
     p_dllPath(dll_path)
 {
@@ -54,15 +51,11 @@ ECUSeedKeyDLL::ECUSeedKeyDLL(QString dll_path, QObject *parent) : QObject(parent
     this->p_dll_name = info.fileName();
     emit DLLNameChanged();
 
-    QString dll_info_str = "[" + info.fileName() + "] ";
-    qDebug() <<  dll_info_str << "Loading ...";
-
     this->p_dllHandle = LoadLibraryW(QDir::toNativeSeparators(info.absoluteFilePath()).toStdWString().data());
     if(!this->p_dllHandle)
     {
         auto error_str = GetLastErrorAsString();
         this->setErrorMsg(tr("Could not load DLL file. Reason: ")+error_str);
-        qInfo() << dll_info_str << this->errorMsg();
         return;
     }    
     this->loadDllfuncs();
@@ -75,7 +68,6 @@ ECUSeedKeyDLL::~ECUSeedKeyDLL()
 
 void ECUSeedKeyDLL::loadDllfuncs()
 {
-
     this->GetECUName = (_f_GetECUName)GetProcAddress(this->p_dllHandle, "GetECUName");
     if(this->GetECUName != Q_NULLPTR)
     {
@@ -91,22 +83,11 @@ void ECUSeedKeyDLL::loadDllfuncs()
     }
 
     this->GetSeedLength = (_f_GetSeedLength)GetProcAddress(this->p_dllHandle, "GetSeedLength");
-    if(!this->GetSeedLength)
-    {
-       qDebug() << "Function GetSeedLength not found";
-       this->GetSeedLength = Q_NULLPTR;
-    }
-
     this->GetKeyLength = (_f_GetKeyLength)GetProcAddress(this->p_dllHandle, "GetKeyLength");
-    if (!this->GetKeyLength)
-    {
-       qDebug() << "Function GetKeyLength not found";
-       this->GetKeyLength = Q_NULLPTR;
-    }
-
     this->GetConfiguredAccessTypes = (_f_GetConfiguredAccessTypes)GetProcAddress(this->p_dllHandle, "GetConfiguredAccessTypes");
+
     if(this->GetConfiguredAccessTypes != Q_NULLPTR)
-     {
+    {
         int data[256] = {0};
         auto ret = this->GetConfiguredAccessTypes(data);
         if(ret > 0)
@@ -114,25 +95,22 @@ void ECUSeedKeyDLL::loadDllfuncs()
             do
             {
                 auto atype = data[--ret];
-                ///WARNING: Seed and Key length functions could not be called in paralell or asynchrone!
-                /// make sure compiler can't optimize this calls and call this funcs one by one
                 ECUSeedKeyLenPairs skpair;
-                skpair.seed_len = this->GetSeedLength(atype);
-                skpair.key_len  = this->GetKeyLength(atype);
-                //qDebug() << " seed len: " << skpair.seed_len << " keylen " << skpair.key_len;
+                skpair.seed_len = this->GetSeedLength ? this->GetSeedLength(atype) : 4;
+                skpair.key_len  = this->GetKeyLength ? this->GetKeyLength(atype) : 4;
                 this->p_access_types.insert(atype, skpair);
             }
             while(ret > 0);
             emit this->AccessTypesChanged();
         }
-     }
-    else qDebug() << "Function GetConfiguredAccessTypes not found";
+    }
 
     this->GenerateKeyExOpt = (_f_GenerateKeyExOpt)GetProcAddress(this->p_dllHandle, "GenerateKeyExOpt");
-    if(this->GenerateKeyExOpt == Q_NULLPTR)
+    this->GenerateKeyEx = (_f_GenerateKeyEx)GetProcAddress(this->p_dllHandle, "GenerateKeyEx");
+
+    if(this->GenerateKeyExOpt == Q_NULLPTR && this->GenerateKeyEx == Q_NULLPTR)
     {
-        this->setErrorMsg(tr("GenerateKeyExOpt not found in DLL ") + this->p_dllPath);
-        qWarning() << this->errorMsg();
+        this->setErrorMsg(tr("Neither GenerateKeyExOpt nor GenerateKeyEx found in DLL ") + this->p_dllPath);
         this->p_ecu_name = tr("not seedkey dll");
         emit ECUNameChanged();
         return;
@@ -165,7 +143,6 @@ Q_INVOKABLE qint32 ECUSeedKeyDLL::seedLength(QString access_type)
     {
         return this->p_access_types.value(acc).seed_len;
     }
-
     return 0;
 }
 
@@ -176,56 +153,79 @@ Q_INVOKABLE qint32 ECUSeedKeyDLL::keyLength(QString access_type)
     {
         return this->p_access_types.value(acc).key_len;
     }
-
     return 0;
 }
 
 QList<qint32> ECUSeedKeyDLL::generateKeyFromSeed(QList<qint32> seed, qint32 access_type, qint32 key_len)
 {
     QList<qint32> key;
-    if (this->GenerateKeyExOpt == Q_NULLPTR)
+    if (this->GenerateKeyExOpt == Q_NULLPTR && this->GenerateKeyEx == Q_NULLPTR)
     {
-        qWarning() << this->errorMsg();
         return key;
     }
 
-    // 1. 使用 QByteArray 分配 256 字节输入缓冲区，支持 32 字节（及更长）Seed
     QByteArray seed_data(256, '\0');
     int seed_size = seed.size();
-    if (seed_size > 256) {
-        seed_size = 256;
-    }
+    if (seed_size > 256) seed_size = 256;
     for (int i = 0; i < seed_size; ++i) {
         seed_data[i] = static_cast<char>(seed.at(i) & 0xFF);
     }
 
-    // 2. 使用 QByteArray 分配 256 字节输出缓冲区，解决 64 字节 Key 溢出报错问题
     QByteArray key_data(256, '\0');
-    unsigned int key_data_len = 0;
+    unsigned int req_key_len = (key_len > 0 && key_len <= 256) ? static_cast<unsigned int>(key_len) : 64;
+    unsigned int key_data_len = req_key_len;
+    const char *empty_str = "";
+    int ret = -1;
 
-    // 3. 调用 DLL 生成密钥
-    auto ret = this->GenerateKeyExOpt(
-        reinterpret_cast<const unsigned char*>(seed_data.constData()),
-        static_cast<unsigned int>(seed_size),
-        static_cast<unsigned int>(access_type),
-        Q_NULLPTR,
-        Q_NULLPTR,
-        reinterpret_cast<unsigned char*>(key_data.data()),
-        256,
-        key_data_len
-    );
-    Q_UNUSED(ret)
+    if (this->GenerateKeyExOpt != Q_NULLPTR) {
+        ret = this->GenerateKeyExOpt(
+            reinterpret_cast<const unsigned char*>(seed_data.constData()),
+            static_cast<unsigned int>(seed_size),
+            static_cast<unsigned int>(access_type),
+            empty_str,
+            empty_str,
+            reinterpret_cast<unsigned char*>(key_data.data()),
+            256,
+            key_data_len
+        );
+        // 如果传 256 失败，尝试精确传入界面指定的缓冲区长度 (如 64)
+        if (ret != 0) {
+            key_data_len = req_key_len;
+            ret = this->GenerateKeyExOpt(
+                reinterpret_cast<const unsigned char*>(seed_data.constData()),
+                static_cast<unsigned int>(seed_size),
+                static_cast<unsigned int>(access_type),
+                empty_str,
+                empty_str,
+                reinterpret_cast<unsigned char*>(key_data.data()),
+                req_key_len,
+                key_data_len
+            );
+        }
+    } else if (this->GenerateKeyEx != Q_NULLPTR) {
+        ret = this->GenerateKeyEx(
+            reinterpret_cast<const unsigned char*>(seed_data.constData()),
+            static_cast<unsigned int>(seed_size),
+            static_cast<unsigned int>(access_type),
+            empty_str,
+            reinterpret_cast<unsigned char*>(key_data.data()),
+            256,
+            key_data_len
+        );
+    }
 
-    // 4. 长度判定：优先采用 DLL 返回的实际长度；若 DLL 未写入长度，则采用界面自定义的长度（如 64）
+    // 在界面 Comment 区域直接反馈调用状态码，方便排查
+    this->p_comment = QString("Status: Ret=%1 | SeedLen=%2 | Acc=0x%3 | OutKeyLen=%4")
+                          .arg(ret)
+                          .arg(seed_size)
+                          .arg(access_type, 2, 16, QLatin1Char('0')).toUpper()
+                          .arg(key_data_len);
+    emit this->CommentChanged();
+
     unsigned int final_len = key_data_len;
-    if (final_len == 0 && key_len > 0) {
-        final_len = static_cast<unsigned int>(key_len);
-    }
-    if (final_len > 256) {
-        final_len = 256;
-    }
+    if (final_len == 0 && key_len > 0) final_len = static_cast<unsigned int>(key_len);
+    if (final_len > 256) final_len = 256;
 
-    // 5. 提取完整 Key 字节
     for (unsigned int c = 0; c < final_len; ++c) {
         key.append(static_cast<qint32>(static_cast<unsigned char>(key_data.at(static_cast<int>(c)))));
     }
