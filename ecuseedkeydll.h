@@ -13,13 +13,21 @@ typedef const char * (__cdecl *_f_GetECUName)();
 typedef const char * (__cdecl *_f_GetComment)();
 
 typedef int (__cdecl * _f_GenerateKeyExOpt )( const unsigned char* ipSeedArray,
-                                                                  unsigned int iSeedArraySize,
-                                                                  const unsigned int iSecurityLevel,
-                                                                  const char * ipVariant,
-                                                                  const char* ipOptions,
-                                                                  unsigned char* iopKeyArray,
-                                                                  unsigned int iMaxKeyArraySize,
-                                                                  unsigned int& oActualKeyArraySize );
+                                              unsigned int iSeedArraySize,
+                                              const unsigned int iSecurityLevel,
+                                              const char * ipVariant,
+                                              const char* ipOptions,
+                                              unsigned char* iopKeyArray,
+                                              unsigned int iMaxKeyArraySize,
+                                              unsigned int& oActualKeyArraySize );
+
+typedef int (__cdecl * _f_GenerateKeyEx )( const unsigned char* ipSeedArray,
+                                           unsigned int iSeedArraySize,
+                                           const unsigned int iSecurityLevel,
+                                           const char * ipVariant,
+                                           unsigned char* iopKeyArray,
+                                           unsigned int iMaxKeyArraySize,
+                                           unsigned int& oActualKeyArraySize );
 
 struct ECUSeedKeyLenPairs
 {
@@ -35,14 +43,13 @@ public:
     explicit ECUSeedKeyDLL(QString dll_path, QObject *parent = nullptr);
     ~ECUSeedKeyDLL();
 
-    bool isSeedKeyDll(){return this->GenerateKeyExOpt != Q_NULLPTR;}
+    bool isSeedKeyDll(){return (this->GenerateKeyExOpt != Q_NULLPTR || this->GenerateKeyEx != Q_NULLPTR);}
 
     Q_PROPERTY(QString ECUName READ ECUName NOTIFY ECUNameChanged);
     Q_PROPERTY(QString DLLName READ DLLName NOTIFY DLLNameChanged);
     Q_PROPERTY(QString Comment READ Comment NOTIFY CommentChanged);
 
     Q_PROPERTY(QList<qint32> AccessTypes READ AccessTypes NOTIFY AccessTypesChanged);
-    /// TODO: two extra funcs for QML :/
     Q_PROPERTY(QString AccessTypesString READ AccessTypesString NOTIFY AccessTypesChanged);
     Q_PROPERTY(QStringList AccessTypesStringList READ AccessTypesStringList NOTIFY AccessTypesChanged);
 
@@ -88,6 +95,7 @@ private:
     _f_GetECUName                   GetECUName;
     _f_GetComment                   GetComment;
     _f_GenerateKeyExOpt             GenerateKeyExOpt;
+    _f_GenerateKeyEx                GenerateKeyEx;
 
 private:
     HMODULE     p_dllHandle;
