@@ -1,27 +1,24 @@
 QT += quick
 CONFIG += c++latest
 
-GIT_LATEST_TAG=$$system(git describe --always --abbrev=0)
-SW_VERSION=\\\"$$GIT_LATEST_TAG\\\"
+GIT_LATEST_TAG = 1.0.0.4
+SW_VERSION = \\\"1.0.0.4\\\"
 DEFINES += SW_VERSION=$$(SW_VERSION)
 
-VERSION_MAJOR=$$section(GIT_LATEST_TAG, ., 0, 0)
-VERSION_MINOR=$$section(GIT_LATEST_TAG, ., 1, 1)
-VERSION_PATCH=$$section(GIT_LATEST_TAG, ., 2, 2)
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
+VERSION_PATCH = 0
 
-RC_ICONS="Resources/icon.ico"
-RC_LANG="en"
+RC_ICONS = "Resources/icon.ico"
+RC_LANG = "en"
 
-VERSION=$$GIT_LATEST_TAG
-VERSION_PE_HEADER = $$VERSION_MAJOR'.'$$VERSION_MINOR
+VERSION = 1.0.0.4
+VERSION_PE_HEADER = 1.0
 
-message("VER: $$VERSION" )
+message("VER: $$VERSION")
 
 DEFINES += QT_NO_DEBUG_OUTPUT
 
-# You can make your code fail to compile if it uses deprecated APIs.
-# In order to do so, uncomment the following line.
-#DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 TARGET = MBSeedKey
 DESTDIR = build/release
 
@@ -39,11 +36,10 @@ RESOURCES += qml.qrc
 TRANSLATIONS += \
     mbseedkey_en.ts
 
-
 win32 {
     CONFIG += embed_manifest_exe
-    QMAKE_LFLAGS += /LARGEADDRESSAWARE
-#    QMAKE_LFLAGS_WINDOWS += /MANIFESTUAC:"level='requireAdministrator'"
+    win32-msvc*: QMAKE_LFLAGS += /LARGEADDRESSAWARE
+    win32-g++: QMAKE_LFLAGS += -Wl,--large-address-aware
 }
 
 DEPLOY_TARGET = $$shell_quote($$shell_path($$DESTDIR"/"$$TARGET".exe"))
