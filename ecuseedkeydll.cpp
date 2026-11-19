@@ -189,29 +189,29 @@ QList<qint32> ECUSeedKeyDLL::generateKeyFromSeed(QList<qint32> seed, qint32 acce
         return key;
     }
 
-    // 1. 扩大输入 Seed 缓冲区至 256 字节，完美支持 32 字节（及更长）Seed
-    unsigned char seed_data = {0};
-    unsigned int seed_size = static_cast<unsigned int>(seed.size());
-    if (seed_size > sizeof(seed_data)) {
-        seed_size = sizeof(seed_data);
+    // 1. 使用 QByteArray 分配 256 字节输入缓冲区，支持 32 字节（及更长）Seed
+    QByteArray seed_data(256, '\0');
+    int seed_size = seed.size();
+    if (seed_size > 256) {
+        seed_size = 256;
     }
-    for (unsigned int i = 0; i < seed_size; ++i) {
-        seed_data[i] = static_cast<unsigned char>(seed.at(i) & 0xFF);
+    for (int i = 0; i < seed_size; ++i) {
+        seed_data[i] = static_cast<char>(seed.at(i) & 0xFF);
     }
 
-    // 2. 扩大输出 Key 缓冲区至 256 字节（原版只有 32 字节，导致 64 字节 Key 直接溢出报错返回全 0）
-    unsigned char key_data = {0};
+    // 2. 使用 QByteArray 分配 256 字节输出缓冲区，解决 64 字节 Key 溢出报错问题
+    QByteArray key_data(256, '\0');
     unsigned int key_data_len = 0;
 
-    // 3. 调用 DLL 生成密钥，传入充足的缓冲区大小 (256)
+    // 3. 调用 DLL 生成密钥
     auto ret = this->GenerateKeyExOpt(
-        seed_data,
-        seed_size,
-        access_type,
+        reinterpret_cast<const unsigned char*>(seed_data.constData()),
+        static_cast<unsigned int>(seed_size),
+        static_cast<unsigned int>(access_type),
         Q_NULLPTR,
         Q_NULLPTR,
-        key_data,
-        sizeof(key_data),
+        reinterpret_cast<unsigned char*>(key_data.data()),
+        256,
         key_data_len
     );
     Q_UNUSED(ret)
@@ -221,13 +221,13 @@ QList<qint32> ECUSeedKeyDLL::generateKeyFromSeed(QList<qint32> seed, qint32 acce
     if (final_len == 0 && key_len > 0) {
         final_len = static_cast<unsigned int>(key_len);
     }
-    if (final_len > sizeof(key_data)) {
-        final_len = sizeof(key_data);
+    if (final_len > 256) {
+        final_len = 256;
     }
 
-    // 5. 读取完整的 Key 字节列表
+    // 5. 提取完整 Key 字节
     for (unsigned int c = 0; c < final_len; ++c) {
-        key.append(static_cast<qint32>(key_data[c]));
+        key.append(static_cast<qint32>(static_cast<unsigned char>(key_data.at(static_cast<int>(c)))));
     }
 
     return key;
@@ -245,7 +245,6 @@ QString ECUSeedKeyDLL::generateKeyFromSeed(QString seed, QString access_type, QS
 QString ECUSeedKeyDLL::generateKeyFromSeed(QString seed, qint32 access_type, qint32 key_len)
 {
     QList<qint32> seed_list;
-    // 兼容带空格（"BE ED AC..."）和不带空格的 16 进制字符串输入
     QString clean_seed = seed.trimmed().remove(QChar(' '));
     for (int i = 0; i + 1 < clean_seed.length(); i += 2) {
         bool ok = false;
@@ -255,7 +254,6 @@ QString ECUSeedKeyDLL::generateKeyFromSeed(QString seed, qint32 access_type, qin
         }
     }
 
-    // 将界面传入的自定义 key_len（如 64）真正传递给底层计算函数
     auto key = this->generateKeyFromSeed(seed_list, access_type, key_len);
     QString key_str;
     for (int i = 0; i < key.size(); ++i) {
