@@ -1,0 +1,38 @@
+name: Build Windows x86 EXE
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Qt 5.15.2 (win32_mingw81)
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '5.15.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win32_mingw81'
+
+      - name: Build EXE and Bundle DLLs
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          qmake ..\mbseedkey.pro CONFIG+=release
+          mingw32-make -j4
+          mkdir package
+          copy release\*.exe package\
+          windeployqt --qmldir .. package\mbseedkey.exe
+
+      - name: Upload Compiled Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbseedkey-64byte-win32
+          path: build/package/
