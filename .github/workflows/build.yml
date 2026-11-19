@@ -22,13 +22,15 @@ jobs:
           install-deps: 'true'
           tools: 'tools_mingw,qt.tools.win32_mingw810'
 
-      - name: Build and Auto-Deploy EXE
+      - name: Build EXE and Copy MinGW Runtime DLLs
         shell: cmd
         run: |
           set PATH=D:\a\mbseedkey64\Qt\5.15.2\mingw81_32\bin;D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin;%PATH%
           qmake mbseedkey.pro CONFIG+=release
           mingw32-make -j4
-
+          copy D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libgcc_s_dw2-1.dll build\release\
+          copy D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libstdc++-6.dll build\release\
+          copy D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libwinpthread-1.dll build\release\
 
       - name: Upload Compiled Package
         uses: actions/upload-artifact@v4
