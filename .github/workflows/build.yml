@@ -26,9 +26,9 @@ jobs:
         shell: cmd
         run: |
           set PATH=D:\a\mbseedkey64\Qt\5.15.2\mingw81_32\bin;D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin;%PATH%
-          set QT_PLUGIN_PATH=D:\a\mbseedkey64\Qt\5.15.2\mingw81_32\plugins
           qmake mbseedkey.pro CONFIG+=release
           mingw32-make -j4
+          windeployqt --compiler-runtime --release --force --qmldir . build\release\MBSeedKey.exe
 
       - name: Upload Compiled Package
         uses: actions/upload-artifact@v4
