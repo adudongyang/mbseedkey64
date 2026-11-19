@@ -183,60 +183,84 @@ Q_INVOKABLE qint32 ECUSeedKeyDLL::keyLength(QString access_type)
 QList<qint32> ECUSeedKeyDLL::generateKeyFromSeed(QList<qint32> seed, qint32 access_type, qint32 key_len)
 {
     QList<qint32> key;
-    if(this->GenerateKeyExOpt == Q_NULLPTR)
+    if (this->GenerateKeyExOpt == Q_NULLPTR)
     {
         qWarning() << this->errorMsg();
         return key;
     }
 
-    unsigned char * seed_data = new unsigned char[seed.length()];
-    auto i = 0;
-    foreach(auto d, seed)seed_data[i++] = d;
+    // 1. 扩大输入 Seed 缓冲区至 256 字节，完美支持 32 字节（及更长）Seed
+    unsigned char seed_data = {0};
+    unsigned int seed_size = static_cast<unsigned int>(seed.size());
+    if (seed_size > sizeof(seed_data)) {
+        seed_size = sizeof(seed_data);
+    }
+    for (unsigned int i = 0; i < seed_size; ++i) {
+        seed_data[i] = static_cast<unsigned char>(seed.at(i) & 0xFF);
+    }
 
-    unsigned char key_data[256] = {0};
+    // 2. 扩大输出 Key 缓冲区至 256 字节（原版只有 32 字节，导致 64 字节 Key 直接溢出报错返回全 0）
+    unsigned char key_data = {0};
     unsigned int key_data_len = 0;
 
-    ///FIX: some DLL's return zero but key is filled out
-    auto ret = this->GenerateKeyExOpt(seed_data, seed.length(), access_type, Q_NULLPTR, Q_NULLPTR, key_data, 256,  key_data_len);
+    // 3. 调用 DLL 生成密钥，传入充足的缓冲区大小 (256)
+    auto ret = this->GenerateKeyExOpt(
+        seed_data,
+        seed_size,
+        access_type,
+        Q_NULLPTR,
+        Q_NULLPTR,
+        key_data,
+        sizeof(key_data),
+        key_data_len
+    );
     Q_UNUSED(ret)
-    if(key_data_len <= 0 && (key_data[0] != 0 && key_data[1] != 0))
-    {
-        qWarning() << "GenerateKeyExOpt returned zero size, but data buf is set. Try to copy data";
-        if(key_len != 0 || this->GetKeyLength == Q_NULLPTR)key_data_len = key_len;
-        else key_data_len = this->GetKeyLength(access_type);
+
+    // 4. 长度判定：优先采用 DLL 返回的实际长度；若 DLL 未写入长度，则采用界面自定义的长度（如 64）
+    unsigned int final_len = key_data_len;
+    if (final_len == 0 && key_len > 0) {
+        final_len = static_cast<unsigned int>(key_len);
+    }
+    if (final_len > sizeof(key_data)) {
+        final_len = sizeof(key_data);
     }
 
-    unsigned int c = 0;
-    do
-    {
-        key.append(key_data[c++]);
+    // 5. 读取完整的 Key 字节列表
+    for (unsigned int c = 0; c < final_len; ++c) {
+        key.append(static_cast<qint32>(key_data[c]));
     }
-    while(c < key_data_len);
 
-    //qDebug() << "[KEYDATA]: " << QByteArray::fromRawData((const char *)key_data, 255).toHex(' ');
     return key;
 }
 
 QString ECUSeedKeyDLL::generateKeyFromSeed(QString seed, QString access_type, QString key_len)
 {
-    return this->generateKeyFromSeed(seed, access_type.toInt(Q_NULLPTR, 16), key_len.toInt(Q_NULLPTR, 10));
+    bool ok_acc = false;
+    bool ok_len = false;
+    qint32 acc = access_type.trimmed().toInt(&ok_acc, 16);
+    qint32 klen = key_len.trimmed().toInt(&ok_len, 10);
+    return this->generateKeyFromSeed(seed, ok_acc ? acc : 0, ok_len ? klen : 0);
 }
 
 QString ECUSeedKeyDLL::generateKeyFromSeed(QString seed, qint32 access_type, qint32 key_len)
 {
-    Q_UNUSED(key_len);
     QList<qint32> seed_list;
-    foreach(auto el, seed.split(QChar(' '), Qt::SkipEmptyParts))
-    {
-        bool ok;
-        auto hex = el.toInt(&ok,16);
-        seed_list.append(hex);
+    // 兼容带空格（"BE ED AC..."）和不带空格的 16 进制字符串输入
+    QString clean_seed = seed.trimmed().remove(QChar(' '));
+    for (int i = 0; i + 1 < clean_seed.length(); i += 2) {
+        bool ok = false;
+        int val = clean_seed.mid(i, 2).toInt(&ok, 16);
+        if (ok) {
+            seed_list.append(val);
+        }
     }
+
+    // 将界面传入的自定义 key_len（如 64）真正传递给底层计算函数
     auto key = this->generateKeyFromSeed(seed_list, access_type, key_len);
     QString key_str;
-    while(!key.isEmpty()){
-        auto hex = key.takeFirst();if(hex < 16)key_str.append('0');
-        key_str.append(QString::number(hex, 16)).append(QChar(' '));
+    for (int i = 0; i < key.size(); ++i) {
+        if (i > 0) key_str += QChar(' ');
+        key_str += QStringLiteral("%1").arg(key.at(i) & 0xFF, 2, 16, QLatin1Char('0')).toUpper();
     }
-    return key_str.trimmed().toUpper();
+    return key_str;
 }
