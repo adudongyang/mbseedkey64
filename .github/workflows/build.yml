@@ -11,8 +11,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install Qt 5.15.2 (win32_mingw81)
         uses: jurplel/install-qt-action@v3
@@ -24,21 +22,15 @@ jobs:
           install-deps: 'true'
           tools: 'tools_mingw,qt.tools.win32_mingw810'
 
-      - name: Build EXE and Bundle DLLs
+      - name: Build and Auto-Deploy EXE
         shell: cmd
         run: |
           set PATH=D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin;%PATH%
-          git tag -f v1.0.004
-          mkdir build
-          cd build
-          qmake ..\mbseedkey.pro CONFIG+=release VERSION=1.0.0.4
+          qmake mbseedkey.pro CONFIG+=release
           mingw32-make -j4
-          mkdir package
-          copy release\*.exe package\
-          windeployqt --qmldir .. package\mbseedkey.exe
 
       - name: Upload Compiled Package
         uses: actions/upload-artifact@v4
         with:
           name: mbseedkey-64byte-win32
-          path: build/package/
+          path: build/release/
