@@ -41,7 +41,3 @@ win32 {
     win32-msvc*: QMAKE_LFLAGS += /LARGEADDRESSAWARE
     win32-g++: QMAKE_LFLAGS += -Wl,--large-address-aware
 }
-
-DEPLOY_TARGET = $$shell_quote($$shell_path($$DESTDIR"/"$$TARGET".exe"))
-WINDEPLOY_CMD = $$shell_quote($$shell_path($$[QT_INSTALL_BINS]$$QMAKE_DIR_SEP"windeployqt.exe"))
-win32: QMAKE_POST_LINK = $$WINDEPLOY_CMD --compiler-runtime --verbose 2 --release --angle --qmldir $$shell_quote($$shell_path($$_PRO_FILE_PWD_)) $$DEPLOY_TARGET
