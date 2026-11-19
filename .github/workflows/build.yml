@@ -1,4 +1,4 @@
-name: Build Windows x86 EXE
+name: Build Windows x86 MSVC EXE
 
 on:
   push:
@@ -12,28 +12,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Qt 5.15.2 (win32_mingw81)
+      - name: Setup MSVC x86 Environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Install Qt 5.15.2 (win32_msvc2019)
         uses: jurplel/install-qt-action@v3
         with:
           version: '5.15.2'
           host: 'windows'
           target: 'desktop'
-          arch: 'win32_mingw81'
-          install-deps: 'true'
-          tools: 'tools_mingw,qt.tools.win32_mingw810'
+          arch: 'win32_msvc2019'
 
-      - name: Build EXE and Copy MinGW Runtime DLLs
+      - name: Build EXE with MSVC
         shell: cmd
         run: |
-          set PATH=D:\a\mbseedkey64\Qt\5.15.2\mingw81_32\bin;D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin;%PATH%
           qmake mbseedkey.pro CONFIG+=release
-          mingw32-make -j4
-          copy /Y "D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libgcc*.dll" "build\release\"
-          copy /Y "D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libstd*.dll" "build\release\"
-          copy /Y "D:\a\mbseedkey64\Qt\Tools\mingw810_32\bin\libwinpthread*.dll" "build\release\"
+          nmake
 
-      - name: Upload Compiled Package
+      - name: Upload Compiled EXE
         uses: actions/upload-artifact@v4
         with:
-          name: mbseedkey-64byte-win32
-          path: build/release/
+          name: mbseedkey-64byte-msvc-win32
+          path: build/release/MBSeedKey.exe
