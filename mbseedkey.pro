@@ -1,5 +1,5 @@
 QT += quick
-CONFIG += c++latest
+CONFIG += c++17
 
 GIT_LATEST_TAG = 1.0.0.4
 SW_VERSION = \\\"1.0.0.4\\\"
